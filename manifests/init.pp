@@ -23,6 +23,10 @@ class pam (
   $pam_d_sshd_group                    = 'root',
   $pam_d_sshd_mode                     = '0644',
   $pam_d_sshd_template                 = undef,
+  $pam_sshd_auth_lines                 = undef,
+  $pam_sshd_account_lines              = undef,
+  $pam_sshd_password_lines             = undef,
+  $pam_sshd_session_lines              = undef,
   $pam_auth_lines                      = undef,
   $pam_account_lines                   = undef,
   $pam_password_lines                  = undef,
@@ -50,9 +54,18 @@ class pam (
   $system_auth_ac_password_lines       = undef,
   $system_auth_ac_session_lines        = undef,
   $vas_major_version                   = '4',
+  $manage_nsswitch                     = true,
 ) {
 
-  include ::nsswitch
+  if is_string($manage_nsswitch) == true {
+    $manage_nsswitch_real = str2bool($manage_nsswitch)
+  } else {
+    $manage_nsswitch_real = $manage_nsswitch
+  }
+
+  if $manage_nsswitch_real == true {
+    include ::nsswitch
+  }
 
   case $::osfamily {
     'RedHat': {
@@ -820,20 +833,95 @@ class pam (
                 ]
               }
             }
+            '16.04': {
+              $default_pam_d_login_template = 'pam/login.ubuntu16.erb'
+              $default_pam_d_sshd_template  = 'pam/sshd.ubuntu16.erb'
+              $default_package_name         = 'libpam0g'
+
+              if $ensure_vas == 'present' {
+                if $vas_major_version == '3' {
+                  fail("Pam is only supported with vas_major_version 4 on Ubuntu 16.04. Your vas_major_version is <${vas_major_version}>.")
+                }
+
+                $default_pam_auth_lines = [
+                  'auth sufficient pam_vas3.so create_homedir get_nonvas_pass',
+                  'auth requisite  pam_vas3.so echo_return',
+                  'auth [success=1 default=ignore] pam_unix.so nullok_secure use_first_pass',
+                  'auth requisite  pam_deny.so',
+                  'auth required   pam_permit.so',
+                ]
+
+                $default_pam_account_lines = [
+                  'account sufficient pam_vas3.so',
+                  'account requisite  pam_vas3.so echo_return',
+                  'account [success=1 new_authtok_reqd=done default=ignore]  pam_unix.so',
+                  'account requisite  pam_deny.so',
+                  'account required   pam_permit.so',
+                ]
+
+                $default_pam_password_lines = [
+                  'password sufficient  pam_vas3.so',
+                  'password  requisite pam_vas3.so echo_return',
+                  'password  [success=1 default=ignore]  pam_unix.so obscure sha512',
+                  'password  requisite pam_deny.so',
+                  'password  required  pam_permit.so',
+                ]
+
+                $default_pam_session_lines = [
+                  'session [default=1] pam_permit.so',
+                  'session requisite pam_deny.so',
+                  'session required  pam_permit.so',
+                  'session optional  pam_umask.so',
+                  'session required  pam_vas3.so create_homedir',
+                  'session requisite pam_vas3.so echo_return',
+                  'session required  pam_unix.so',
+                  'session optional  pam_systemd.so',
+                ]
+
+              } else {
+
+                $default_pam_auth_lines = [
+                  'auth  [success=1 default=ignore]  pam_unix.so nullok_secure',
+                  'auth  requisite     pam_deny.so',
+                  'auth  required      pam_permit.so',
+                ]
+
+                $default_pam_account_lines = [
+                  'account [success=1 new_authtok_reqd=done default=ignore]  pam_unix.so',
+                  'account requisite     pam_deny.so',
+                  'account required      pam_permit.so',
+                ]
+
+                $default_pam_password_lines = [
+                  'password  [success=1 default=ignore]  pam_unix.so obscure sha512',
+                  'password  requisite     pam_deny.so',
+                  'password  required      pam_permit.so',
+                ]
+
+                $default_pam_session_lines = [
+                  'session [default=1]   pam_permit.so',
+                  'session requisite     pam_deny.so',
+                  'session required      pam_permit.so',
+                  'session optional      pam_umask.so',
+                  'session required      pam_unix.so',
+                  'session optional      pam_systemd.so',
+                ]
+              }
+            }
             default: {
-              fail("Pam is only supported on Ubuntu 12.04 and 14.04. Your lsbdistrelease is identified as <${::lsbdistrelease}>.")
+              fail("Pam is only supported on Ubuntu 12.04, 14.04 and 16.04. Your lsbdistrelease is identified as <${::lsbdistrelease}>.")
             }
           }
         }
         'Debian': {
-          case $::lsbdistrelease {
-            '8.2': {
+          case $::lsbmajdistrelease {
+            /(7|8|9)/: {
 
               if $ensure_vas == 'present' {
-                fail("Pam: vas is not supported on ${::osfamily} ${::lsbdistrelease}")
+                fail("Pam: vas is not supported on ${::osfamily} ${::lsbmajdistrelease}")
               }
-              $default_pam_d_login_template = 'pam/login.debian8.erb'
-              $default_pam_d_sshd_template  = 'pam/sshd.debian8.erb'
+              $default_pam_d_login_template = "pam/login.debian${::lsbmajdistrelease}.erb"
+              $default_pam_d_sshd_template  = "pam/sshd.debian${::lsbmajdistrelease}.erb"
               $default_package_name         = 'libpam0g'
 
 
@@ -861,11 +949,9 @@ class pam (
                 'session required      pam_permit.so',
                 'session required      pam_unix.so',
               ]
-
-
             }
             default: {
-              fail("Pam is only supported on Debian 8. Your operatingsystemmajrelease is identified as <${::lsbdistrelease}>.")
+              fail("Pam is only supported on Debian 7 and 8. Your lsbmajdistrelease is <${::lsbmajdistrelease}>.")
             }
           }
         }
@@ -1076,6 +1162,26 @@ class pam (
     $my_pam_d_login_template = $pam_d_login_template
   }
 
+  if $pam_d_sshd_template == 'pam/sshd.custom.erb' {
+    if $pam_sshd_auth_lines == undef or
+      $pam_sshd_account_lines == undef or
+      $pam_sshd_password_lines == undef or
+      $pam_sshd_session_lines == undef {
+        fail('pam_sshd_[auth|account|password|session]_lines required when using the pam/sshd.custom.erb template')
+    }
+    validate_array($pam_sshd_auth_lines)
+    validate_array($pam_sshd_account_lines)
+    validate_array($pam_sshd_password_lines)
+    validate_array($pam_sshd_session_lines)
+  } else {
+    if $pam_sshd_auth_lines != undef or
+      $pam_sshd_account_lines != undef or
+      $pam_sshd_password_lines != undef or
+      $pam_sshd_session_lines != undef {
+        fail('pam_sshd_[auth|account|password|session]_lines are only valid when pam_d_sshd_template is configured with the pam/sshd.custom.erb template')
+    }
+  }
+
   if $pam_d_sshd_template == undef {
     $my_pam_d_sshd_template = $default_pam_d_sshd_template
   } else {
@@ -1126,35 +1232,35 @@ class pam (
     $my_pam_session_lines = $pam_session_lines
   }
 
-if ( $::osfamily == 'RedHat' ) and ( $::operatingsystemmajrelease == '6' or $::operatingsystemmajrelease == '7' ) {
-  if $pam_password_auth_lines == undef {
-    $my_pam_password_auth_lines = $default_pam_password_auth_lines
-  } else {
-    $my_pam_password_auth_lines = $pam_password_auth_lines
-  }
-  validate_array($my_pam_password_auth_lines)
+  if ( $::osfamily == 'RedHat' ) and ( $::operatingsystemmajrelease == '6' or $::operatingsystemmajrelease == '7' ) {
+    if $pam_password_auth_lines == undef {
+      $my_pam_password_auth_lines = $default_pam_password_auth_lines
+    } else {
+      $my_pam_password_auth_lines = $pam_password_auth_lines
+    }
+    validate_array($my_pam_password_auth_lines)
 
-  if $pam_password_account_lines == undef {
-    $my_pam_password_account_lines = $default_pam_password_account_lines
-  } else {
-    $my_pam_password_account_lines = $pam_password_account_lines
-  }
-  validate_array($my_pam_password_account_lines)
+    if $pam_password_account_lines == undef {
+      $my_pam_password_account_lines = $default_pam_password_account_lines
+    } else {
+      $my_pam_password_account_lines = $pam_password_account_lines
+    }
+    validate_array($my_pam_password_account_lines)
 
-  if $pam_password_password_lines == undef {
-    $my_pam_password_password_lines = $default_pam_password_password_lines
-  } else {
-    $my_pam_password_password_lines = $pam_password_password_lines
-  }
-  validate_array($my_pam_password_password_lines)
+    if $pam_password_password_lines == undef {
+      $my_pam_password_password_lines = $default_pam_password_password_lines
+    } else {
+      $my_pam_password_password_lines = $pam_password_password_lines
+    }
+    validate_array($my_pam_password_password_lines)
 
-  if $pam_password_session_lines == undef {
-    $my_pam_password_session_lines = $default_pam_password_session_lines
-  } else {
-    $my_pam_password_session_lines = $pam_password_session_lines
+    if $pam_password_session_lines == undef {
+      $my_pam_password_session_lines = $default_pam_password_session_lines
+    } else {
+      $my_pam_password_session_lines = $pam_password_session_lines
+    }
+    validate_array($my_pam_password_session_lines)
   }
-  validate_array($my_pam_password_session_lines)
-}
 
   if $services != undef {
     create_resources('pam::service',$services)

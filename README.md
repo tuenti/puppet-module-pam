@@ -10,9 +10,10 @@ This module manages PAM including accesslogin and limits.conf with functionality
 
 # Compatibility
 
-This module has been tested to work on the following systems with Puppet v3
-(with and without the future parser) and v4 with Ruby versions 1.8.7 (Puppet v3
-only), 1.9.3, 2.0.0 and 2.1.0.
+This module has been tested to work on the following systems with Puppet
+v3 (with and without the future parser) and v4 with Ruby versions 1.8.7,
+1.9.3, 2.0.0 and 2.1.9. Please see .travis.yml for a full matrix of
+versions.
 
  * EL 5
  * EL 6
@@ -27,7 +28,10 @@ only), 1.9.3, 2.0.0 and 2.1.0.
  * OpenSuSE 13.1
  * Ubuntu 12.04 LTS
  * Ubuntu 14.04 LTS
- * Debian 8.2
+ * Ubuntu 16.04 LTS
+ * Debian 7
+ * Debian 8
+ * Debian 9
 
 EL no longer requires the `redhat-lsb` package.
 
@@ -40,7 +44,7 @@ EL no longer requires the `redhat-lsb` package.
 
 allowed_users
 -------------
-Array or Hash of strings and/or arrays to configure users and origins in access.conf. The default allows the root user/group from origin 'ALL'.
+String, Array or Hash of strings and/or arrays to configure users and origins in access.conf. The default allows the root user/group from origin 'ALL'.
 
 - *Default*: 'root'
 
@@ -187,7 +191,35 @@ pam_d_sshd_template
 -------------------
 Content template of $pam_d_sshd_path. If undef, parameter is set based on the OS version.
 
+For cases where a full customization of the sshd PAM configuration is required, set pam_d_sshd_template to use pam/sshd.custom.erb that is provided with this module.
+pam/sshd.custom.erb must be further configured with the parameters pam_sshd_auth_lines, pam_sshd_account_lines, pam_sshd_password_lines and pam_sshd_session_lines.
+Note that the pam_d_sshd_template parameter is a no-op on Solaris.
+
 - *Default*: undef, default is set based on OS version
+
+pam_sshd_auth_lines
+-------------------
+An ordered array of strings that define the content for PAM sshd auth. This setting is required and only valid if pam_d_sshd_template is configured to use the pam/sshd.custom.erb template.
+
+- *Default*: undef
+
+pam_sshd_account_lines
+----------------------
+An ordered array of strings that define the content for PAM sshd account. This setting is required and only valid if pam_d_sshd_template is configured to use the pam/sshd.custom.erb template.
+
+- *Default*: undef
+
+pam_sshd_password_lines
+-----------------------
+An ordered array of strings that define the content for PAM sshd password. This setting is required and only valid if pam_d_sshd_template is configured to use the pam/sshd.custom.erb template.
+
+- *Default*: undef
+
+pam_sshd_session_lines
+----------------------
+An ordered array of strings that define the content for PAM sshd session. This setting is required and only valid if pam_d_sshd_template is configured to use the pam/sshd.custom.erb template.
+
+- *Default*: undef
 
 pam_auth_lines
 --------------
@@ -432,6 +464,12 @@ purge_limits_d_dir
 Boolean to purge the limits.d directory.
 
 - *Default*: false
+
+manage_nsswitch
+------------------
+Boolean to manage the inclusion of the nsswitch class.
+
+- *Default*: true
 
 ===
 
